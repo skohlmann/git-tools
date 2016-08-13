@@ -1,0 +1,137 @@
+#!/bin/bash
+
+function source_dir {
+    local SOURCE="${BASH_SOURCE[0]}"
+    DIR="$( dirname "$SOURCE" )"
+    while [ -h "$SOURCE" ]
+    do
+        SOURCE="$(readlink "$SOURCE")"
+        [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+        DIR="$( cd -P "$( dirname "$SOURCE"  )" && pwd )"
+    done
+    DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
+}
+
+set -e
+set -o pipefail
+
+source_dir
+
+
+COMMAND=$1
+
+case "$COMMAND" in
+        branch)
+            git rev-parse --symbolic-full-name --abbrev-ref HEAD
+            ;;
+
+        revision)
+            git rev-parse $(git rev-parse --symbolic-full-name --abbrev-ref HEAD)
+            ;;
+
+        rev)
+            git rev-parse $(git rev-parse --symbolic-full-name --abbrev-ref HEAD)
+            ;;
+
+        checkout)
+            if [ $(git branch | grep -cw $2) == 0 ]; then
+                git checkout --track -b $2 remotes/origin/$2
+            else
+                git checkout $2
+            fi
+            ;;
+
+        remoteexists)
+            if [ $(git branch -r | grep -cw origin/$2) == 0 ]; then
+                # echo remote branch $2 does not exists
+                exit 2
+            else
+                # echo remote branch $2 exists
+                exit 0
+            fi
+            ;;
+
+        localexists)
+            if [ $(git branch | grep -cw $2) == 0 ]; then
+                # echo local branch $2 does not exists
+                exit 2
+            else
+                # echo local branch $2 exists
+                exit 0
+            fi
+            ;;
+
+        remoteurl)
+            echo "$(git config --get remote.origin.url)"
+            ;;
+
+         meta)
+            SUB_COMMAND=$2
+            FILES="${PWD}/*"
+            for file in ${FILES}; do
+                if [ -d $file ]; then
+                    case "$SUB_COMMAND" in
+                       list)
+                           cd $file
+                           echo $(gitext remoteurl)
+                           cd ..
+                           ;;
+
+                       listbranch)
+                           cd $file
+                           echo -n "$(${DIR}/gitext remoteurl)  "
+                           ${DIR}/gitext branch
+                           cd ..
+                           ;;
+
+                       branchOf)
+                           cd $file
+                           branch=$(${DIR}/gitext branch)
+                           if [[ $branch == $3 ]]; then
+                               echo "$(${DIR}/gitext remoteurl)"
+                           fi
+                           cd ..
+                           ;;
+
+                       hasBranch)
+                           if [ -z $3 ]; then
+                               exit 0
+                           fi
+                           cd $file
+                           if [ $(git branch | grep -cw $3) != 0 ]; then
+                               gitext remoteurl
+                           else
+                              if [ $(git branch -r | grep -cw origin/$3) != 0 ]; then
+                                  gitext remoteurl
+                              fi
+                           fi
+                           cd ..
+                           ;;
+
+                       checkout)
+                           cd $file
+                           gitext checkout $3
+                           cd ..
+                           ;;
+
+                       reset)
+                           cd $file
+                           echo -n "$(${DIR}/gitext remoteurl)  "
+                           git reset $3 $4
+                           cd ..
+                           ;;
+
+                       *)
+                           echo "Unknown meta command: $SUB_COMMAND"
+                           echo "Use {list|listbranch|branchOf BRANCH|hasBranch BRANCH|checkout BRANCH|reset TYPE BRANCH}"
+                           exit 1
+                    esac
+                fi
+            done
+            ;;
+
+        *)
+            echo "Usage: $0 {branch|rev|checkout BRANCH|remoteexists BRANCH|localexists BRANCH|meta SUB-COMMAND{list|listbranch|checkoutIf BRANCH}}"
+            exit 1
+
+esac

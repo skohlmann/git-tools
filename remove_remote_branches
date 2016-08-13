@@ -1,0 +1,29 @@
+#!/bin/sh
+
+# Synopsis
+# Tool to delete all merged remote branches of a Git repository which are not whitelisted
+
+# Parameter
+# 1st parameter: Path of the whitelist file
+#                The whitelist must contain 1 line per branch to be whitelisted. 
+whitelist=$1
+
+while read remote; do
+  
+  found=false
+  while read white; do
+    if [[ "$remote" =~ "$white" ]]
+    then
+      found=true;
+    fi
+  done < "$whitelist"
+
+  if ! $found;
+  then
+    remote=${remote#origin/}
+    if [ "$remote" != "master" ];  # protect master and release
+    then
+      git push origin --delete "$remote"
+    fi
+  fi
+done < <(git branch -r --merged | command grep -vE "^(\*|\s*master\s*$)")

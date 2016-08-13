@@ -1,0 +1,51 @@
+#!/bin/bash
+
+#!/bin/bash
+
+# Synopsis
+# Tool to list all not merged remote branches of a Git repository which are not whitelisted
+# Output is a comma separated value file (VCSV) containing the branch name, commit and author
+# information. The CSV file is sorted and contains a header.
+
+# Parameter
+# 1st parameter: The whitelist must contain 1 line per branch to be whitelisted.
+# 2nd parameter: Name of the file with the not merged branches.
+whitelist=$1
+nomergedlist=$2
+
+rm -f "$nomergedlist"
+
+echo "Branchname,Commit Date,Committer,Commiter Email,Author data,Author,Author Email" >> "$nomergedlist"
+
+while read remote; do
+
+  found=false
+  while read white; do
+    if [[ "$remote" =~ "$white" ]]
+    then
+      found=true;
+    fi
+  done < "$whitelist"
+
+  if ! $found;
+  then
+    remote=${remote#origin/}
+    if [ "$remote" != "master" ];  # ignore master and release
+    then 
+      echo checkout $remote
+      git checkout $remote
+      echo $remote,$(git log --date=short --pretty="%cd,%cn,%ce,%ad,%an,%ae" -1) >> "$nomergedlist"
+    fi
+  else 
+    echo "Found '${remote#origin/}' in whitelist. Ignoring."
+  fi
+    
+done < <(git branch -r --no-merged | command grep -vE "^(\*|\s*master\s*$)")
+
+# Sort by dates
+tmpfile=$(mktemp)
+sort --field-separator=',' --key=2 --key=5 --key=1 "$nomergedlist" > "$tmpfile"
+mv "$tmpfile" "$nomergedlist"
+
+# Clean up
+rm -rf "$tmpfile"
